@@ -8,6 +8,9 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 
 #define WIDTH  640
 #define HEIGHT 480
@@ -59,10 +62,10 @@ std::string fragment_shader_source = R"(
     in vec4 color;
     uniform vec2 rectSize;                                                          
     uniform float radius;
+    uniform float border_thickness;
 
     const vec4 fillColor = vec4(1.0, 0.0, 0.0, 1.0);                                
     const vec4 borderColor = vec4(1.0, 1.0, 0.0, 1.0);                              
-    const float borderThickness = 10.0;                                             
 
     float RectSDF(vec2 p, vec2 b, float r)                                          
     {                                                                               
@@ -74,13 +77,26 @@ std::string fragment_shader_source = R"(
     {
         vec2 pos = rectSize * tex_coord;                                            
                                                                                  
-        float fDist = RectSDF(pos-rectSize/2.0, rectSize/2.0 - borderThickness/2.0-1.0, radius);
-        float fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist) - borderThickness / 2.0);
+        float fDist;
+        float fBlendAmount;
+        vec4 oColor;
+
+        if (abs(border_thickness) < 0.01)
+        {
+            fDist = RectSDF(pos-rectSize/2.0, rectSize/2.0, radius);
+            fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist));
+            oColor = (fDist < 0.0) ? color : vec4(0.0);
+        }
+        else
+        {
+            fDist = RectSDF(pos-rectSize/2.0, rectSize/2.0 - border_thickness/2.0-1.0, radius);
+            fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist) - border_thickness / 2.0);
+            vec4 v4FromColor = borderColor;                                             
+            vec4 v4ToColor = (fDist <= 0.0) ? color : vec4(0.0);                     
+            oColor = mix(v4FromColor, v4ToColor, fBlendAmount);                   
+        }
                                                                                  
-        vec4 v4FromColor = borderColor;                                             
-        //vec4 v4ToColor = (fDist < 0.0) ? fillColor : vec4(0.0);                     
-        vec4 v4ToColor = (fDist < 0.0) ? color : vec4(0.0);                     
-        gl_FragColor = mix(v4FromColor, v4ToColor, fBlendAmount);                   
+        gl_FragColor = oColor;
     }
 )";
 
@@ -95,21 +111,27 @@ GLuint vbo;
 GLuint ebo;
 GLuint program;
 float radius = 0.0;
+float border_thickness = 10.0;
+glm::vec4 color_ul = glm::vec4(1.0f);
+glm::vec4 color_ur = glm::vec4(1.0f);
+glm::vec4 color_lr = glm::vec4(1.0f);
+glm::vec4 color_ll = glm::vec4(1.0f);
 
 float rect[4] = { 50.0f, 50.0f, 250.0f, 250.0f };
 
 void render()
 {
+   float vertices[4][9] =
+   {
+        // aPos                 // aColor                                       // aTexCoord
+      { rect[0], rect[1], 0.0f, color_ul.r, color_ul.g, color_ul.b, color_ul.a, 0.0f, 1.0f },
+      { rect[2], rect[1], 0.0f, color_ur.r, color_ur.g, color_ur.b, color_ur.a, 1.0f, 1.0f },
+      { rect[2], rect[3], 0.0f, color_lr.r, color_lr.g, color_lr.b, color_lr.a, 1.0f, 0.0f },
+      { rect[0], rect[3], 0.0f, color_ll.r, color_ll.g, color_ll.b, color_ll.a, 0.0f, 0.0f },
+   };
+
    if (initialize_buffers)
    {
-      float vertices[4][9] =
-      {
-           // aPos                 // aColor               // aTexCoord
-         { rect[0], rect[1], 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
-         { rect[2], rect[1], 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
-         { rect[2], rect[3], 0.0f, 0.6f, 0.3f, 0.3f, 1.0f, 1.0f, 0.0f },
-         { rect[0], rect[3], 0.0f, 0.6f, 0.3f, 0.3f, 1.0f, 0.0f, 0.0f },
-      };
 
       GLuint indices[6] =
       {
@@ -124,7 +146,7 @@ void render()
 
       GLCALL(glBindVertexArray(vao));
       GLCALL(glBindBuffer(GL_ARRAY_BUFFER, vbo));
-      GLCALL(glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW));
+      GLCALL(glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_DYNAMIC_DRAW));
       GLCALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo));
       GLCALL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW));
       GLCALL(glEnableVertexAttribArray(0));
@@ -148,10 +170,11 @@ void render()
    int radius_loc;
    GLCALL(radius_loc = glGetUniformLocation(program, "radius"));
    GLCALL(glUniform1f(radius_loc, radius));
+   int border_thickness_loc;
+   GLCALL(border_thickness_loc = glGetUniformLocation(program, "border_thickness"));
+   GLCALL(glUniform1f(border_thickness_loc, border_thickness));
 
-   radius += 0.5;
-   if (radius > 90.0)
-      radius = 0.0;
+   GLCALL(glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices));
 
    GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr));
 }
@@ -189,6 +212,15 @@ int main(int argc, char* argv[])
    }
 
    glfwSetWindowSize(window, WIDTH, HEIGHT);
+
+   // Setup Dear ImGui
+   IMGUI_CHECKVERSION();
+   ImGui::CreateContext();
+   ImGui::StyleColorsDark();
+
+   // Setup Platform/Render backends
+   ImGui_ImplGlfw_InitForOpenGL(window, true);
+   ImGui_ImplOpenGL3_Init("#version 330");
 
    // Compile shaders and link program
    GLuint vertex_shader;
@@ -282,6 +314,24 @@ int main(int argc, char* argv[])
       GLCALL(glClear(GL_COLOR_BUFFER_BIT));
 
       render();
+
+      // Start the Dear ImGui frame
+      ImGui_ImplOpenGL3_NewFrame();
+      ImGui_ImplGlfw_NewFrame();
+      ImGui::NewFrame();
+
+      ImGui::Begin("Debug");
+      ImGui::SliderFloat("Corner Radius", &radius, 0.0f, 100.0f);
+      ImGui::SliderFloat("Border Thickness", &border_thickness, 0.0f, 100.0f);
+      ImGui::ColorEdit4("Upper Left", &color_ul.r);
+      ImGui::ColorEdit4("Upper Right", &color_ur.r);
+      ImGui::ColorEdit4("Lower Right", &color_lr.r);
+      ImGui::ColorEdit4("Lower Left", &color_ll.r);
+      ImGui::End();
+
+      // Render ImGui
+      ImGui::Render();
+      ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
       glfwSwapBuffers(window);
 
