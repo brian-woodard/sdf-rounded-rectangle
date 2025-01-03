@@ -37,15 +37,18 @@
 std::string vertex_shader_source = R"(
     #version 330 core
     layout (location = 0) in vec3 aPos;
-    layout (location = 1) in vec2 aTexCoord;
+    layout (location = 1) in vec4 aColor;
+    layout (location = 2) in vec2 aTexCoord;
 
     out vec2 tex_coord;
+    out vec4 color;
     uniform mat4 mvp;
 
     void main()
     {
         gl_Position = mvp * vec4(aPos, 1.0);
         tex_coord = aTexCoord;
+        color = aColor;
     }
 )";
 
@@ -53,6 +56,7 @@ std::string fragment_shader_source = R"(
     #version 330 core
 
     in vec2 tex_coord;                                                              
+    in vec4 color;
     uniform vec2 rectSize;                                                          
 
     const vec4 fillColor = vec4(1.0, 0.0, 0.0, 1.0);                                
@@ -75,7 +79,8 @@ std::string fragment_shader_source = R"(
         float fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist) - borderThickness / 2.0);
                                                                                  
         vec4 v4FromColor = borderColor;                                             
-        vec4 v4ToColor = (fDist < 0.0) ? fillColor : vec4(0.0);                     
+        //vec4 v4ToColor = (fDist < 0.0) ? fillColor : vec4(0.0);                     
+        vec4 v4ToColor = (fDist < 0.0) ? color : vec4(0.0);                     
         gl_FragColor = mix(v4FromColor, v4ToColor, fBlendAmount);                   
     }
 )";
@@ -95,13 +100,13 @@ void render()
 {
    if (initialize_buffers)
    {
-      float vertices[4][5] =
+      float vertices[4][9] =
       {
-           // aPos               // aTexCoord
-         {  50.0f,  50.0f, 0.0f, 0.0f, 1.0f },
-         { 350.0f,  50.0f, 0.0f, 1.0f, 1.0f },
-         { 350.0f, 250.0f, 0.0f, 1.0f, 0.0f },
-         {  50.0f, 250.0f, 0.0f, 0.0f, 0.0f },
+           // aPos               // aColor               // aTexCoord
+         {  50.0f,  50.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+         { 350.0f,  50.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
+         { 350.0f, 250.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f },
+         {  50.0f, 250.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
       };
 
       GLuint indices[6] =
@@ -121,9 +126,11 @@ void render()
       GLCALL(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo));
       GLCALL(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW));
       GLCALL(glEnableVertexAttribArray(0));
-      GLCALL(glVertexAttribPointer(0, 3, GL_FLOAT, false, 5 * sizeof(float), (void*)0));
+      GLCALL(glVertexAttribPointer(0, 3, GL_FLOAT, false, 9 * sizeof(float), (void*)0));
       GLCALL(glEnableVertexAttribArray(1));
-      GLCALL(glVertexAttribPointer(1, 2, GL_FLOAT, false, 5 * sizeof(float), (void*)(3 * sizeof(float))));
+      GLCALL(glVertexAttribPointer(1, 4, GL_FLOAT, false, 9 * sizeof(float), (void*)(3 * sizeof(float))));
+      GLCALL(glEnableVertexAttribArray(2));
+      GLCALL(glVertexAttribPointer(2, 2, GL_FLOAT, false, 9 * sizeof(float), (void*)(7 * sizeof(float))));
 
       GLCALL(glUseProgram(program));
       int mvp_loc;
@@ -229,11 +236,11 @@ int main(int argc, char* argv[])
       printf("%s\n", &error_msg[0]);
    }
 
-   //GLCALL(glDetachShader(program, vertex_shader));
-   //GLCALL(glDetachShader(program, fragment_shader));
+   GLCALL(glDetachShader(program, vertex_shader));
+   GLCALL(glDetachShader(program, fragment_shader));
 
-   //GLCALL(glDeleteShader(vertex_shader));
-   //GLCALL(glDeleteShader(fragment_shader));
+   GLCALL(glDeleteShader(vertex_shader));
+   GLCALL(glDeleteShader(fragment_shader));
 
    // Make the window visible
    glfwShowWindow(window);
