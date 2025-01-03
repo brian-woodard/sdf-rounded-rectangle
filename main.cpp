@@ -58,13 +58,12 @@ std::string fragment_shader_source = R"(
     in vec2 tex_coord;                                                              
     in vec4 color;
     uniform vec2 rectSize;                                                          
+    uniform float radius;
 
     const vec4 fillColor = vec4(1.0, 0.0, 0.0, 1.0);                                
     const vec4 borderColor = vec4(1.0, 1.0, 0.0, 1.0);                              
     const float borderThickness = 10.0;                                             
 
-    const float radius = 30.0;                                                      
-                                                                                    
     float RectSDF(vec2 p, vec2 b, float r)                                          
     {                                                                               
         vec2 d = abs(p) - b + vec2(r);                                              
@@ -95,6 +94,9 @@ GLuint vao;
 GLuint vbo;
 GLuint ebo;
 GLuint program;
+float radius = 0.0;
+
+float rect[4] = { 50.0f, 50.0f, 250.0f, 250.0f };
 
 void render()
 {
@@ -102,11 +104,11 @@ void render()
    {
       float vertices[4][9] =
       {
-           // aPos               // aColor               // aTexCoord
-         {  50.0f,  50.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
-         { 350.0f,  50.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
-         { 350.0f, 250.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f },
-         {  50.0f, 250.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f },
+           // aPos                 // aColor               // aTexCoord
+         { rect[0], rect[1], 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f },
+         { rect[2], rect[1], 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f },
+         { rect[2], rect[3], 0.0f, 0.6f, 0.3f, 0.3f, 1.0f, 1.0f, 0.0f },
+         { rect[0], rect[3], 0.0f, 0.6f, 0.3f, 0.3f, 1.0f, 0.0f, 0.0f },
       };
 
       GLuint indices[6] =
@@ -132,17 +134,24 @@ void render()
       GLCALL(glEnableVertexAttribArray(2));
       GLCALL(glVertexAttribPointer(2, 2, GL_FLOAT, false, 9 * sizeof(float), (void*)(7 * sizeof(float))));
 
-      GLCALL(glUseProgram(program));
-      int mvp_loc;
-      GLCALL(mvp_loc = glGetUniformLocation(program, "mvp"));
-      glm::mat4 mvp = glm::ortho(0.0, 640.0, 480.0, 0.0, -1.0, 1.0);
-      GLCALL(glUniformMatrix4fv(mvp_loc, 1, GL_FALSE, &mvp[0][0]));
-      int rect_loc;
-      GLCALL(rect_loc = glGetUniformLocation(program, "rectSize"));
-      GLCALL(glUniform2f(rect_loc, 300.0, 200.0));
-
       initialize_buffers = false;
    }
+
+   GLCALL(glUseProgram(program));
+   int mvp_loc;
+   GLCALL(mvp_loc = glGetUniformLocation(program, "mvp"));
+   glm::mat4 mvp = glm::ortho(0.0, 640.0, 480.0, 0.0, -1.0, 1.0);
+   GLCALL(glUniformMatrix4fv(mvp_loc, 1, GL_FALSE, &mvp[0][0]));
+   int rect_loc;
+   GLCALL(rect_loc = glGetUniformLocation(program, "rectSize"));
+   GLCALL(glUniform2f(rect_loc, rect[2]-rect[0], rect[3]-rect[1] ));
+   int radius_loc;
+   GLCALL(radius_loc = glGetUniformLocation(program, "radius"));
+   GLCALL(glUniform1f(radius_loc, radius));
+
+   radius += 0.5;
+   if (radius > 90.0)
+      radius = 0.0;
 
    GLCALL(glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr));
 }
