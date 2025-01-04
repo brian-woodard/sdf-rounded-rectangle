@@ -63,9 +63,8 @@ std::string fragment_shader_source = R"(
     uniform vec2 rectSize;                                                          
     uniform float radius;
     uniform float border_thickness;
-
-    const vec4 fillColor = vec4(1.0, 0.0, 0.0, 1.0);                                
-    const vec4 borderColor = vec4(1.0, 1.0, 0.0, 1.0);                              
+    uniform float edge_softness;
+    uniform vec4 border_color;
 
     float RectSDF(vec2 p, vec2 b, float r)                                          
     {                                                                               
@@ -76,26 +75,31 @@ std::string fragment_shader_source = R"(
     void main()
     {
         vec2 pos = rectSize * tex_coord;                                            
-                                                                                 
+
         float fDist;
         float fBlendAmount;
+        float sdf_factor;
         vec4 oColor;
 
-        if (abs(border_thickness) < 0.01)
-        {
-            fDist = RectSDF(pos-rectSize/2.0, rectSize/2.0, radius);
-            fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist));
-            oColor = (fDist < 0.0) ? color : vec4(0.0);
-        }
-        else
+        vec2 softness_padding = vec2(max(0.0, edge_softness*2.0 - 1.0),
+                                     max(0.0, edge_softness*2.0 - 1.0));
+
+        fDist = RectSDF(pos-rectSize/2.0, rectSize/2.0 - softness_padding, radius);
+        sdf_factor = 1.0 - smoothstep(0.0, 2.0*edge_softness, fDist);
+
+        if (border_thickness > 0.0)
         {
             fDist = RectSDF(pos-rectSize/2.0, rectSize/2.0 - border_thickness/2.0-1.0, radius);
             fBlendAmount = smoothstep(-1.0, 1.0, abs(fDist) - border_thickness / 2.0);
-            vec4 v4FromColor = borderColor;                                             
+            vec4 v4FromColor = border_color;                                             
             vec4 v4ToColor = (fDist <= 0.0) ? color : vec4(0.0);                     
-            oColor = mix(v4FromColor, v4ToColor, fBlendAmount);                   
+            oColor = mix(v4FromColor, v4ToColor, fBlendAmount) * sdf_factor;
         }
-                                                                                 
+        else
+        {
+            oColor = color * sdf_factor;
+        }
+
         gl_FragColor = oColor;
     }
 )";
@@ -111,11 +115,13 @@ GLuint vbo;
 GLuint ebo;
 GLuint program;
 float radius = 0.0;
-float border_thickness = 10.0;
+float border_thickness = 0.0;
+float edge_softness = 0.0;
 glm::vec4 color_ul = glm::vec4(1.0f);
 glm::vec4 color_ur = glm::vec4(1.0f);
 glm::vec4 color_lr = glm::vec4(1.0f);
 glm::vec4 color_ll = glm::vec4(1.0f);
+glm::vec4 border_color = glm::vec4(1.0f, 1.0f, 0.0f, 1.0f);
 
 float rect[4] = { 50.0f, 50.0f, 250.0f, 250.0f };
 
@@ -173,6 +179,12 @@ void render()
    int border_thickness_loc;
    GLCALL(border_thickness_loc = glGetUniformLocation(program, "border_thickness"));
    GLCALL(glUniform1f(border_thickness_loc, border_thickness));
+   int border_color_loc;
+   GLCALL(border_color_loc = glGetUniformLocation(program, "border_color"));
+   GLCALL(glUniform4fv(border_color_loc, 1, &border_color.r));
+   int edge_softness_loc;
+   GLCALL(edge_softness_loc = glGetUniformLocation(program, "edge_softness"));
+   GLCALL(glUniform1f(edge_softness_loc, edge_softness));
 
    GLCALL(glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices));
 
@@ -321,12 +333,18 @@ int main(int argc, char* argv[])
       ImGui::NewFrame();
 
       ImGui::Begin("Debug");
+      ImGui::SliderFloat("Rect X1", &rect[0], 10.0f, 300.0f);
+      ImGui::SliderFloat("Rect X2", &rect[2], 10.0f, 500.0f);
+      ImGui::SliderFloat("Rect Y1", &rect[1], 10.0f, 300.0f);
+      ImGui::SliderFloat("Rect Y2", &rect[3], 10.0f, 500.0f);
       ImGui::SliderFloat("Corner Radius", &radius, 0.0f, 100.0f);
       ImGui::SliderFloat("Border Thickness", &border_thickness, 0.0f, 100.0f);
+      ImGui::SliderFloat("Edge Softness", &edge_softness, 0.0f, 10.0f);
       ImGui::ColorEdit4("Upper Left", &color_ul.r);
       ImGui::ColorEdit4("Upper Right", &color_ur.r);
       ImGui::ColorEdit4("Lower Right", &color_lr.r);
       ImGui::ColorEdit4("Lower Left", &color_ll.r);
+      ImGui::ColorEdit4("Border Color", &border_color.r);
       ImGui::End();
 
       // Render ImGui
